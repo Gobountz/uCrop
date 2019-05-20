@@ -3,6 +3,7 @@ package com.yalantis.ucrop.task;
 import android.Manifest.permission;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -10,9 +11,11 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.content.CursorLoader;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -208,7 +211,11 @@ public class BitmapLoadTask extends AsyncTask<Void, Void, BitmapLoadTask.BitmapW
         OutputStream outputStream = null;
         try {
             inputStream = mContext.getContentResolver().openInputStream(inputUri);
-            outputStream = new FileOutputStream(new File(outputUri.getPath()));
+            if ("content".equals(outputUri.getScheme())) {
+                outputStream = mContext.getContentResolver().openOutputStream(outputUri);
+            } else {
+                outputStream = new FileOutputStream(new File(outputUri.getPath()));
+            }
             if (inputStream == null) {
                 throw new NullPointerException("InputStream for given input Uri is null");
             }
@@ -271,10 +278,22 @@ public class BitmapLoadTask extends AsyncTask<Void, Void, BitmapLoadTask.BitmapW
     @Override
     protected void onPostExecute(@NonNull BitmapWorkerResult result) {
         if (result.mBitmapWorkerException == null) {
-            mBitmapLoadCallback.onBitmapLoaded(result.mBitmapResult, result.mExifInfo, mInputUri.getPath(), (mOutputUri == null) ? null : mOutputUri.getPath());
+            mBitmapLoadCallback.onBitmapLoaded(result.mBitmapResult, result.mExifInfo,
+                    this.getRealPathFromURI(mInputUri), (mOutputUri == null) ? null : this.getRealPathFromURI(mOutputUri));
         } else {
             mBitmapLoadCallback.onFailure(result.mBitmapWorkerException);
         }
+    }
+
+    private String getRealPathFromURI(Uri contentUri) {
+        String[] proj = { MediaStore.Images.Media.DATA };
+        CursorLoader loader = new CursorLoader(mContext, contentUri, proj, null, null, null);
+        Cursor cursor = loader.loadInBackground();
+        int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+        cursor.moveToFirst();
+        String result = cursor.getString(column_index);
+        cursor.close();
+        return result;
     }
 
 }
